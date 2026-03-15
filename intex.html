@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>מנתח פרויקטים: java/ kt/ dart/ ts/ tsx/ js/ jsx/ py/ cs</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="header">
+  <div style="font-size:1.5rem">📱</div>
+  <div><h1>מנתח פרויקטים: java/ kt/ dart/ ts/ tsx/ js/ jsx/ py/ cs</h1><p>תרשים מחלקות + זרימה אינטראקטיבית</p></div>
+  <div class="hact">
+    <div class="mtog" id="mtog" style="display:none">
+      <div class="mtab on" onclick="setMode('diagram')">🗺️ תרשים</div>
+      <div class="mtab" onclick="setMode('flow')">⚡ זרימה</div>
+    </div>
+    <button class="btn bg" id="cpBtn" disabled onclick="copyCode()">📋 העתק קוד</button>
+    <button class="btn br" id="pdfBtn" disabled onclick="exportPDF()">📄 ייצא PDF</button>
+    <button class="btn" style="background:#6b46c1;color:white" id="dlDiagBtn" disabled onclick="downloadHTML('diagram')">⬇ תרשים HTML</button>
+    <button class="btn" style="background:#b7791f;color:white" id="dlFlowBtn" disabled onclick="downloadHTML('flow')">⬇ זרימה HTML</button>
+  </div>
+</div>
+
+<div class="app">
+  <div class="sb">
+    <div class="sbs">
+      <div class="upz" id="dz" onclick="document.getElementById('fi').click()">
+        <div class="ico">📂</div>
+        <strong>העלה קבצי פרויקט</strong>
+        <p>.java / .kt / .dart<br>גרור למסך או לחץ</p>
+      </div>
+      <input type="file" id="fi" multiple accept=".java,.kt,.dart" webkitdirectory>
+
+      <div class="box" id="stBox" style="display:none">
+        <div class="boxh">📊 סטטיסטיקות</div>
+        <div class="sr"><span>קבצים</span><span class="sv" id="sF">0</span></div>
+        <div class="sr"><span>מחלקות</span><span class="sv" id="sC">0</span></div>
+        <div class="sr"><span>ממשקים</span><span class="sv" id="sI">0</span></div>
+        <div class="sr"><span>קשרים</span><span class="sv" id="sR">0</span></div>
+      </div>
+
+      <div class="box" id="lgBox" style="display:none">
+        <div class="boxh">🔑 מקרא</div>
+        <div class="lgr"><div class="lgl" style="background:#e53e3e"></div>extends</div>
+        <div class="lgr"><div class="lgl" style="background:#3182ce;border-top:3px dashed #3182ce;height:0"></div>implements / with</div>
+        <div class="lgr"><div class="lgl" style="background:#38a169"></div>has (שדה)</div>
+        <div class="lgr"><div class="lgl" style="background:#805ad5;border-top:3px dashed #805ad5;height:0"></div>uses (שימוש)</div>
+      </div>
+
+      <div class="cli" id="clBox" style="display:none">
+        <h3>🗂️ מחלקות</h3>
+        <div id="clList"></div>
+      </div>
+    </div>
+    <div class="sbf">
+      <div class="hint" id="hint" style="display:none"></div>
+    </div>
+  </div>
+
+  <div class="cw" id="cw">
+    <canvas id="cv"></canvas>
+    <div class="es" id="es">
+      <div class="ico">🏗️</div>
+      <h2>ממתין לפרויקט...</h2>
+      <p>גרור לכאן תיקיית קבצי Java, Kotlin או Dart לקבלת תרשים מחלקות אינטראקטיבי</p>
+    </div>
+    <div class="zc">
+      <button class="zb" onclick="zb(1.2)">+</button>
+      <button class="zb" onclick="zb(.83)">−</button>
+      <button class="zb" onclick="rv()" title="איפוס">⌂</button>
+    </div>
+  </div>
+</div>
+
+<div class="fp" id="fp">
+  <button class="fpcl" onclick="closeFP()">✕</button>
+  <div class="fpt" id="fpT"></div>
+  <div class="fps" id="fpS"></div>
+  <div id="fpComment" class="fpr" style="font-style:italic;color:#718096;margin-bottom:10px;display:none;white-space:pre-wrap;background:#fffbeb;border:1px solid #f6e05e"></div>
+  
+  <div id="fpB"></div>
+</div><div class="atip" id="atip"></div>
+<div class="prog" id="prog"><div class="progbox"><div class="spin"></div>בונה PDF...</div></div>
+<div class="toast" id="toast"></div>
+<div class="modal-overlay" id="methodModal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div>
+        <h2 id="mmTitle">זרימה פנימית</h2>
+        <p id="mmSub" style="font-size:0.75rem;opacity:0.7;">מי קורא למי בתוך המחלקה</p>
+      </div>
+      <button class="modal-close" onclick="closeMethodModal()">✕</button>
+    </div>
+    <div class="modal-body" id="mmBody">
+      <canvas id="mcv"></canvas>
+    </div>
+  </div>
+</div>
+<script type="module" src="./js/main.js"></script>
+<div class="copyright">
+  © כל הזכויות שמורות ל-Shmuel Buchnick | <a href="mailto:shmuel1.618@gmail.com">shmuel1.618@gmail.com</a>
+</div>
+</body>
+</html>
