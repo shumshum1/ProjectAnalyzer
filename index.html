@@ -14,11 +14,13 @@
     <div class="mtog" id="mtog" style="display:none">
       <div class="mtab on" onclick="setMode('diagram')">🗺️ תרשים</div>
       <div class="mtab" onclick="setMode('flow')">⚡ זרימה</div>
+      <div class="mtab" onclick="setMode('arch')">🏗️ ארכיטקטורה</div>
     </div>
     <button class="btn bg" id="cpBtn" disabled onclick="copyCode()">📋 העתק קוד</button>
     <button class="btn br" id="pdfBtn" disabled onclick="exportPDF()">📄 ייצא PDF</button>
     <button class="btn" style="background:#6b46c1;color:white" id="dlDiagBtn" disabled onclick="downloadHTML('diagram')">⬇ תרשים HTML</button>
     <button class="btn" style="background:#b7791f;color:white" id="dlFlowBtn" disabled onclick="downloadHTML('flow')">⬇ זרימה HTML</button>
+    <button class="btn" style="background:#2b6cb0;color:white" id="dlArchBtn" disabled>🏗️ HTML ארכיטקטורה</button>
   </div>
 </div>
 
@@ -28,9 +30,25 @@
       <div class="upz" id="dz" onclick="document.getElementById('fi').click()">
         <div class="ico">📂</div>
         <strong>העלה קבצי פרויקט</strong>
-        <p>.java / .kt / .dart<br>גרור למסך או לחץ</p>
+        <p>.java / .kt / .dart / וכו'<br>גרור לכאן או לחץ לבחירה</p>
       </div>
-      <input type="file" id="fi" multiple accept=".java,.kt,.dart" webkitdirectory>
+      <input type="file" id="fi" multiple accept=".java,.kt,.dart,.ts,.tsx,.js,.jsx,.py,.cs" webkitdirectory>
+
+      <div class="box" id="archBox" style="display:none; border-color: #6b46c1; border-width: 2px;">
+        <div class="boxh" style="color: #6b46c1;">⚙️ הגדרות שכבות (קומות)</div>
+        <select id="archType" onchange="recalcArch()" style="width:100%; padding:5px; font-size:0.75rem; border-radius:4px; border:1px solid #e2e8f0; margin-bottom: 8px;">
+          <option value="mvvm">מודל MVVM (אנדרואיד/ווב)</option>
+          <option value="mvc">מודל MVC קלאסי</option>
+          <option value="clean">Clean Architecture</option>
+        </select>
+        <div style="font-size:0.7rem; color:#718096; margin-bottom: 3px;">צלילה ממוקדת:</div>
+       <select id="layerFocus" onchange="ArchLayerManager.reset(this.value)" style="width:100%; padding:5px; font-size:0.75rem; border-radius:4px; border:1px solid #e2e8f0;">
+    <option value="3">קומה 3: UI (ממשק)</option>
+    <option value="2">קומה 2: Logic (לוגיקה)</option>
+    <option value="1">קומה 1: Data (נתונים)</option>
+    <option value="0">קומה 0: Models (שדות)</option>
+  </select>
+      </div>
 
       <div class="box" id="stBox" style="display:none">
         <div class="boxh">📊 סטטיסטיקות</div>
@@ -39,7 +57,6 @@
         <div class="sr"><span>ממשקים</span><span class="sv" id="sI">0</span></div>
         <div class="sr"><span>קשרים</span><span class="sv" id="sR">0</span></div>
       </div>
-
       <div class="box" id="lgBox" style="display:none">
         <div class="boxh">🔑 מקרא</div>
         <div class="lgr"><div class="lgl" style="background:#e53e3e"></div>extends</div>
@@ -72,7 +89,22 @@
     </div>
   </div>
 </div>
-
+<div class="box" id="archBox" style="display:none; margin-top:10px; border-color: #6b46c1;">
+  <div class="boxh" style="color: #6b46c1;">⚙️ הגדרות שכבות</div>
+  <select id="archType" onchange="recalcArch()" style="width:100%; padding:5px; font-size:0.75rem; border-radius:4px; border:1px solid #e2e8f0;">
+    <option value="mvvm">מודל MVVM (אנדרואיד/ווב)</option>
+    <option value="mvc">מודל MVC קלאסי</option>
+    <option value="clean">Clean Architecture</option>
+  </select>
+  <div style="margin-top:8px; font-size:0.7rem; color:#718096;">צלילה ממוקדת:</div>
+  <select id="layerFocus" onchange="draw()" style="width:100%; padding:5px; font-size:0.75rem; border-radius:4px; border:1px solid #e2e8f0;">
+    <option value="all">הצג את כל הבניין</option>
+    <option value="3">קומה 3: UI (ממשק)</option>
+    <option value="2">קומה 2: Logic (לוגיקה)</option>
+    <option value="1">קומה 1: Data (נתונים)</option>
+    <option value="0">קומה 0: Models (שדות)</option>
+  </select>
+</div>
 <div class="fp" id="fp">
   <button class="fpcl" onclick="closeFP()">✕</button>
   <div class="fpt" id="fpT"></div>

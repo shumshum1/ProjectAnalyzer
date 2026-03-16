@@ -85,7 +85,7 @@ export function parse(code, fn) {
     let m; while((m=re.exec(clean))!==null) {
       const name=m[2], par=m[3]?m[3].split(',').map(s=>s.trim()):[];
       const idxs=pyBodyIdx(clean, m.index + m[0].length); const bC=clean.slice(idxs.st,idxs.en), bO=code.slice(idxs.st,idxs.en);
-      res.push({ name, par, file:fn, type:'class', fields:pyF(bC,bO), methods:pyM(bC,bO,name), comment: getCommentBefore(code, m.index), rawBody:bO });
+      res.push({ name, par, file:fn, path:fn, type:'class', fields:pyF(bC,bO), methods:pyM(bC,bO,name), comment: getCommentBefore(code, m.index), rawBody:bO });
     }
   } else if (isTsJs) {
     let classesInFile = 0;
@@ -94,14 +94,14 @@ export function parse(code, fn) {
       classesInFile++;
       const name=m[2], par=[]; if(m[3]) par.push(m[3].trim()); if(m[4]) par.push(...m[4].split(',').map(s=>s.trim()));
       const idxs=xbodyIdx(clean, m.index+m[0].length-1); const bC=clean.slice(idxs.st,idxs.en), bO=code.slice(idxs.st,idxs.en);
-      res.push({ name, par, file:fn, type:m[1]?'abstract':'class', fields:tsF(bC,bO), methods:tsM(bC,bO,name), comment: getCommentBefore(code, m.index), rawBody:bO });
+      res.push({ name, par, file:fn, path:fn, type:m[1]?'abstract':'class', fields:tsF(bC,bO), methods:tsM(bC,bO,name), comment: getCommentBefore(code, m.index), rawBody:bO });
     }
     const intRe = /(?:^|\n)\s*(?:export\s+)?interface\s+(\w+)(?:\s+extends\s+([\w.\s,]+))?\s*\{/g;
     while((m=intRe.exec(clean))!==null) {
       classesInFile++;
       const name=m[1], par=m[2]?m[2].split(',').map(s=>s.trim()):[];
       const idxs=xbodyIdx(clean, m.index+m[0].length-1); const bC=clean.slice(idxs.st,idxs.en), bO=code.slice(idxs.st,idxs.en);
-      res.push({ name, par, file:fn, type:'interface', fields:tsF(bC,bO), methods:tsM(bC,bO,name), comment: getCommentBefore(code, m.index), rawBody:bO });
+      res.push({ name, par, file:fn, path:fn, type:'interface', fields:tsF(bC,bO), methods:tsM(bC,bO,name), comment: getCommentBefore(code, m.index), rawBody:bO });
     }
 
     // --- פיצ'ר חדש: טיפול בקבצים ללא מחלקות (הפיכת הקובץ למודול) ---
@@ -360,4 +360,82 @@ export function buildInternalMethodRels(classes){
          });
       });
    });
+}
+// ====== יש להחליף את הפונקציה assignLayer בקובץ parser.js ======
+
+export function assignLayer(cls, archType = 'mvvm') {
+    const name = (cls.name || '').toLowerCase();
+    const path = (cls.file || '').toLowerCase();
+    let content = name + ' ' + path;
+    
+    cls.methods.forEach(m => { content += ' ' + (m.n||'').toLowerCase() + ' ' + (m.body||'').toLowerCase(); });
+    cls.fields.forEach(f => { content += ' ' + (f.n||'').toLowerCase() + ' ' + (f.t||'').toLowerCase(); });
+    cls.par.forEach(p => { content += ' ' + (p||'').toLowerCase(); });    // מילונים לכל קומה
+    // מילונים פוליגלוטיים (מותאמים ל-JS, TS, Java, C#, Kotlin, Dart, Python)
+    const uiWords = [
+        // כללי / Web
+        'view', 'component', 'render', 'html', 'css', 'style', 'click', 'dom', 'ui', 'button', 'layout', 'page', 'screen', 'template', 'form', 'window', 'gui',
+        // Android / React / Flutter
+        'activity', 'fragment', 'widget', 'react'
+    ];
+    
+    const logicWords = [
+        // כללי
+        'service', 'manager', 'controller', 'handler', 'util', 'helper', 'process', 'calc', 'logic', 'business', 'router',
+        // פריימוורקים (MVVM, Redux, Flutter BLoC)
+        'usecase', 'provider', 'viewmodel', 'bloc', 'cubit', 'reducer', 'action', 'command', 'store'
+    ];
+    
+    const dataWords = [
+        // מסדי נתונים ורשת
+        'repository', 'repo', 'database', 'db', 'sql', 'dao', 'api', 'network', 'fetch', 'query', 'http', 'storage', 'json', 'orm', 'crud', 'cache',
+        // ספריות ספציפיות
+        'axios', 'firebase', 'mongo', 'graphql', 'mapper'
+    ];
+    
+    const modelWords = [
+        // טיפוסי נתונים
+        'model', 'entity', 'dto', 'type', 'interface', 'schema', 'state', 'enum',
+        // שפות ספציפיות (Kotlin, Python, C#)
+        'data class', 'dataclass', 'record', 'struct', 'serializer'
+    ];
+    let scores = { 3: 0, 2: 0, 1: 0, 0: 0 }; // 3: UI, 2: Logic, 1: Data, 0: Model
+
+    // פונקציית עזר לספירת הופעות של מילים
+    const countMatches = (words) => words.reduce((sum, word) => {
+        const regex = new RegExp('\\b' + word + '\\b', 'g');
+        const matches = content.match(regex);
+        return sum + (matches ? matches.length : 0);
+    }, 0);
+
+    // ניקוד מתוך קריאת התוכן (נקודה על כל הופעה של מילה)
+    scores[3] += countMatches(uiWords);
+    scores[2] += countMatches(logicWords);
+    scores[1] += countMatches(dataWords);
+    scores[0] += countMatches(modelWords);
+
+    // בונוסים משמעותיים (5 נקודות) אם המילה מופיעה במפורש בשם המחלקה או בקובץ!
+    uiWords.forEach(w => { if(name.includes(w) || path.includes(w)) scores[3] += 5; });
+    logicWords.forEach(w => { if(name.includes(w) || path.includes(w)) scores[2] += 5; });
+    dataWords.forEach(w => { if(name.includes(w) || path.includes(w)) scores[1] += 5; });
+    modelWords.forEach(w => { if(name.includes(w) || path.includes(w)) scores[0] += 5; });
+
+    // היוריסטיקה חכמה: אם למחלקה אין פונקציות ויש בה רק שדות - היא כנראה מודל נתונים טיפש (DTO/Model)
+    if (cls.methods.length === 0 && cls.fields.length > 0) scores[0] += 10;
+    
+    // היוריסטיקה חכמה 2: אם זו מחלקה שיורשת מ-React.Component או Activity
+    if (cls.par.some(p => p.includes('Component') || p.includes('View') || p.includes('Activity'))) scores[3] += 15;
+
+    // מציאת הקומה עם הניקוד הגבוה ביותר
+    let maxScore = -1;
+    let assignedFloor = 2; // ברירת מחדל: לוגיקה (אם לא נמצאו רמזים בכלל)
+    
+    for (let floor in scores) {
+        if (scores[floor] > maxScore && scores[floor] > 0) {
+            maxScore = scores[floor];
+            assignedFloor = parseInt(floor);
+        }
+    }
+
+    return assignedFloor;
 }
