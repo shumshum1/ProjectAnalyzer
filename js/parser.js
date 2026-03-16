@@ -368,37 +368,17 @@ export function assignLayer(cls, archType = 'mvvm') {
     const path = (cls.file || '').toLowerCase();
     let content = name + ' ' + path;
     
+    // אוספים את כל הטקסט של המחלקה לתוך מחרוזת אחת גדולה לחיפוש
     cls.methods.forEach(m => { content += ' ' + (m.n||'').toLowerCase() + ' ' + (m.body||'').toLowerCase(); });
     cls.fields.forEach(f => { content += ' ' + (f.n||'').toLowerCase() + ' ' + (f.t||'').toLowerCase(); });
-    cls.par.forEach(p => { content += ' ' + (p||'').toLowerCase(); });    // מילונים לכל קומה
-    // מילונים פוליגלוטיים (מותאמים ל-JS, TS, Java, C#, Kotlin, Dart, Python)
-    const uiWords = [
-        // כללי / Web
-        'view', 'component', 'render', 'html', 'css', 'style', 'click', 'dom', 'ui', 'button', 'layout', 'page', 'screen', 'template', 'form', 'window', 'gui',
-        // Android / React / Flutter
-        'activity', 'fragment', 'widget', 'react'
-    ];
-    
-    const logicWords = [
-        // כללי
-        'service', 'manager', 'controller', 'handler', 'util', 'helper', 'process', 'calc', 'logic', 'business', 'router',
-        // פריימוורקים (MVVM, Redux, Flutter BLoC)
-        'usecase', 'provider', 'viewmodel', 'bloc', 'cubit', 'reducer', 'action', 'command', 'store'
-    ];
-    
-    const dataWords = [
-        // מסדי נתונים ורשת
-        'repository', 'repo', 'database', 'db', 'sql', 'dao', 'api', 'network', 'fetch', 'query', 'http', 'storage', 'json', 'orm', 'crud', 'cache',
-        // ספריות ספציפיות
-        'axios', 'firebase', 'mongo', 'graphql', 'mapper'
-    ];
-    
-    const modelWords = [
-        // טיפוסי נתונים
-        'model', 'entity', 'dto', 'type', 'interface', 'schema', 'state', 'enum',
-        // שפות ספציפיות (Kotlin, Python, C#)
-        'data class', 'dataclass', 'record', 'struct', 'serializer'
-    ];
+    cls.par.forEach(p => { content += ' ' + (p||'').toLowerCase(); });
+
+    // מילונים לכל קומה
+    const uiWords = ['view', 'component', 'widget', 'activity', 'fragment', 'render', 'html', 'css', 'style', 'click', 'dom', 'react', 'screen', 'page', 'ui', 'button', 'layout'];
+    const logicWords = ['service', 'manager', 'controller', 'usecase', 'handler', 'provider', 'util', 'helper', 'process', 'calc', 'logic', 'business'];
+    const dataWords = ['repository', 'repo', 'database', 'db', 'sql', 'dao', 'api', 'network', 'fetch', 'axios', 'query', 'http', 'storage', 'json', 'firebase', 'mongo'];
+    const modelWords = ['model', 'entity', 'dto', 'type', 'interface', 'data class', 'schema', 'state'];
+
     let scores = { 3: 0, 2: 0, 1: 0, 0: 0 }; // 3: UI, 2: Logic, 1: Data, 0: Model
 
     // פונקציית עזר לספירת הופעות של מילים

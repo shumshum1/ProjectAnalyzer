@@ -3,7 +3,8 @@ import { parse, buildRels, buildInternalMethodRels, assignLayer } from './parser
 import { generateHTMLExport, copyCode, exportPDF } from './exporter.js';
 
 const CW=300, HEADER_H=58, ROW_H=20, SEC_T=17, PADV=8, PADH=14, TEXT_INDENT=18;
-const ACOL={extends:'#e53e3e',implements:'#3182ce',has:'#38a169',uses:'#805ad5'};const CCOL={
+const ACOL={extends:'#e53e3e',implements:'#3182ce',has:'#38a169',uses:'#805ad5'};
+const CCOL={
   class:    {h:'#c6f6d5',dk:'#276749',bd:'#68d391',tx:'#1a4731'},
   interface:{h:'#bee3f8',dk:'#2a4365',bd:'#63b3ed',tx:'#1a365d'},
   abstract: {h:'#feebc8',dk:'#7b341e',bd:'#f6ad55',tx:'#652b19'},
@@ -62,153 +63,183 @@ function createRelFiltersUI() {
 }
 
 // ==========================================
-// 🏗️ ArchLayerManager - אליפסות קונצנטריות הפוכות
+// 🏗️ ArchLayerManager - מנוע אליפטי מתכווץ/מתרחב
 // ==========================================
 window.ArchLayerManager = {
-    activeNode: null,
-    focusMode: 0, 
-    radii: {}, 
-
-    reset: function() {
-        this.activeNode = null;
-        this.focusMode = 0;
-        this.calculate();
+    activeNode: null, focusMode: 0, radii: {}, visibleFloors: new Set(),
+    
+    init: function() {
+        let maxF = 0;
+        nodes.forEach(n => { 
+            if(n.floor === undefined) n.floor = assignLayer(n.cls, document.getElementById('archType')?.value || 'mvvm');
+            if(n.floor > maxF) maxF = n.floor; 
+        });
+        this.visibleFloors = new Set([maxF]); 
+        this.resetFocus();
     },
 
+    resetFocus: function() { this.activeNode = null; this.focusMode = 0; this.calculate(); },
+
     handleClick: function(node) {
-        if (this.activeNode === node) {
-            this.reset(); 
-        } else {
-            this.activeNode = node;
-            this.focusMode = 1;
+        if (this.activeNode === node) this.resetFocus(); 
+        else { this.activeNode = node; this.focusMode = 1; this.calculate(); }
+    },
+
+    handleBgClick: function(wx, wy) {
+        if (this.focusMode === 1) { this.resetFocus(); return; }
+        let clickedF = -1;
+        
+        // זיהוי קומה לפי משוואת אליפסה
+        for(let f=0; f<=3; f++) {
+            const rData = this.radii[f];
+            if (!rData) continue;
+            const normalizedDist = (wx*wx) / (rData.rx*rData.rx) + (wy*wy) / (rData.ry*rData.ry);
+            if (normalizedDist <= 1) { 
+                clickedF = f; 
+                break; 
+            }
+        }
+        
+        if (clickedF !== -1) {
+            if(this.visibleFloors.has(clickedF)) this.visibleFloors.delete(clickedF); 
+            else this.visibleFloors.add(clickedF);
             this.calculate();
         }
     },
 
     calculate: function() {
-        const archTypeEl = document.getElementById('archType');
-        const archType = archTypeEl ? archTypeEl.value : 'mvvm';
-        
-        nodes.forEach(n => { 
-            if(n.floor === undefined) n.floor = assignLayer(n.cls, archType); // קריאה מעודכנת לפארסר
-            n.archVisible = true; 
-            n.minimized = true;   
-            n.isDimmed = false;
-        });
+        nodes.forEach(n => { n.archVisible = false; n.minimized = true; n.isDimmed = false; });
 
         if (this.focusMode !== 0 && this.activeNode) {
             const activeRels = getFilteredRels(); 
             const relatedRels = activeRels.filter(r => r.from === this.activeNode.cls.name || r.to === this.activeNode.cls.name);
             const connectedNames = relatedRels.map(r => r.from === this.activeNode.cls.name ? r.to : r.from);
-
+            
             nodes.forEach(n => {
-                if (n === this.activeNode) {
-                    n.minimized = false; 
-                    n.isDimmed = false;
-                } else if (connectedNames.includes(n.cls.name)) {
-                    n.minimized = true;  
-                    n.isDimmed = false;  
-                } else {
-                    n.minimized = true;  
-                    n.isDimmed = true;   
-                }
+                if (n === this.activeNode) { n.archVisible = true; n.minimized = false; }
+                else if (connectedNames.includes(n.cls.name)) { n.archVisible = true; n.minimized = false; } 
+                else if (this.visibleFloors.has(n.floor)) { n.archVisible = true; n.minimized = true; n.isDimmed = true; }
             });
+        } else {
+            nodes.forEach(n => { if (this.visibleFloors.has(n.floor)) { n.archVisible = true; n.minimized = true; } });
         }
 
-        let currentRx = 350; 
-        let currentRy = 200; 
-        const gapX = 350; 
-        const gapY = 220; 
-        this.radii = {};
-
+        this.radii = {}; 
+        let currentRx = 0, currentRy = 0;
+        
         for (let f = 0; f <= 3; f++) {
             const fNodes = nodes.filter(n => n.floor === f);
-            if (fNodes.length > 0) {
-                let neededC = 0;
-                fNodes.forEach(n => { neededC += (n.minimized ? 160 : CW) + 60; });
-                const neededR = neededC / (2 * Math.PI);
-                
-                currentRx = Math.max(currentRx, neededR);
-                currentRy = Math.max(currentRy, neededR * 0.65);
-                
-                this.radii[f] = { rx: currentRx, ry: currentRy };
-                
-                currentRx += gapX;
-                currentRy += gapY;
-            } else {
-                this.radii[f] = { rx: currentRx, ry: currentRy };
+            // קומה נחשבת "מורחבת" אם לחצו עליה, או שיש בתוכה מחלקה שמקושרת למיקוד הנוכחי
+            const isExpanded = this.visibleFloors.has(f) || fNodes.some(n => n.archVisible);
+            
+            if (!isExpanded) {
+                // קומה מכווצת - טבעת דקה וידידותית
+                currentRx += (f === 0 ? 50 : 40); 
+                currentRy += (f === 0 ? 50 : 35);
+                this.radii[f] = { rx: currentRx, ry: currentRy, expanded: false };
+                fNodes.forEach(n => n.archVisible = false); // הבטחה שכלום לא יצויר כאן
+                continue;
             }
+
+            // קומה מורחבת
+            const visibleFNodes = fNodes.filter(n => n.archVisible);
+            
+            if (f === 0) {
+                if (visibleFNodes.length > 0) {
+                    const cols = Math.ceil(Math.sqrt(visibleFNodes.length)), rows = Math.ceil(visibleFNodes.length/cols);
+                    const itemW = 200, itemH = 100;
+                    let maxGridW = 0, maxGridH = 0;
+                    
+                    visibleFNodes.forEach((n, i) => {
+                        n.w = n.minimized ? 160 : CW; 
+                        n.h = n.minimized ? HEADER_H : ch(n.cls); 
+                        n.colH = HEADER_H + (n.cls.par.length ? 14 : 0) + PADV;
+                        const c = i % cols, r = Math.floor(i / cols);
+                        n.x = (c - (cols-1)/2) * itemW - n.w/2; 
+                        n.y = (r - (rows-1)/2) * itemH - n.h/2;
+                        
+                        maxGridW = Math.max(maxGridW, cols * itemW);
+                        maxGridH = Math.max(maxGridH, rows * itemH);
+                    });
+                    currentRx = Math.max(currentRx + 60, maxGridW / 2 + 100);
+                    currentRy = Math.max(currentRy + 60, maxGridH / 2 + 80);
+                } else {
+                    currentRx += 80; currentRy += 80;
+                }
+            } else {
+                if (visibleFNodes.length === 0) {
+                    currentRx += 80; currentRy += 80;
+                } else {
+                    visibleFNodes.sort((a,b) => b.cls.methods.length - a.cls.methods.length);
+                    let remNodes = [...visibleFNodes];
+                    let layerOuterRx = currentRx;
+                    let layerOuterRy = currentRy;
+                    
+                    while (remNodes.length > 0) {
+                        let testRx = layerOuterRx + 180; 
+                        let testRy = layerOuterRy + 130; 
+                        let currentRingNodes = [];
+                        let consumedSpace = 0;
+                        let approxPerimeter = 2 * Math.PI * Math.sqrt((testRx*testRx + testRy*testRy) / 2);
+
+                        while (remNodes.length > 0) {
+                            let n = remNodes[0];
+                            n.w = n.minimized ? 160 : CW; 
+                            n.h = n.minimized ? HEADER_H : ch(n.cls); 
+                            n.colH = HEADER_H + (n.cls.par.length ? 14 : 0) + PADV;
+                            let spaceNeeded = Math.sqrt(n.w*n.w + n.h*n.h) + 60; 
+
+                            if (consumedSpace + spaceNeeded > approxPerimeter && currentRingNodes.length > 0) break; 
+                            consumedSpace += spaceNeeded;
+                            currentRingNodes.push(remNodes.shift());
+                        }
+
+                        if (currentRingNodes.length === 1 && consumedSpace > approxPerimeter) {
+                            const ratio = consumedSpace / approxPerimeter;
+                            testRx *= ratio; testRy *= ratio;
+                        }
+
+                        currentRingNodes.forEach((n, i) => {
+                            const angle = (i / currentRingNodes.length) * Math.PI * 2 - Math.PI / 2;
+                            n.x = Math.cos(angle) * testRx - n.w/2; 
+                            n.y = Math.sin(angle) * testRy - n.h/2;
+                        });
+                        
+                        layerOuterRx = testRx;
+                        layerOuterRy = testRy;
+                    }
+                    currentRx = layerOuterRx + 100;
+                    currentRy = layerOuterRy + 80;
+                }
+            }
+            this.radii[f] = { rx: currentRx, ry: currentRy, expanded: true };
         }
-
-        for (let f = 0; f <= 3; f++) {
-            const fNodes = nodes.filter(n => n.floor === f);
-            if(fNodes.length === 0) continue;
-
-            const { rx, ry } = this.radii[f];
-            fNodes.sort((a,b) => b.cls.methods.length - a.cls.methods.length);
-
-            fNodes.forEach((n, i) => {
-                const angle = (i / fNodes.length) * Math.PI * 2 - Math.PI / 2;
-                
-                n.w = n.minimized ? 160 : CW; 
-                n.h = n.minimized ? HEADER_H : ch(n.cls); 
-                n.colH = HEADER_H + (n.cls.par.length ? 14 : 0) + PADV;
-                
-                n.x = Math.cos(angle) * rx - n.w/2;
-                n.y = Math.sin(angle) * ry - n.h/2;
-            });
-        }
-
-        this.updateUI(); 
-        rv();
+        this.updateUI(); rv();
     },
 
     updateUI: function() {
         let titleEl = document.getElementById('archTitle');
         if (!titleEl) {
-            titleEl = document.createElement('div');
-            titleEl.id = 'archTitle';
-            titleEl.style.position = 'absolute';
-            titleEl.style.top = '20px';
-            titleEl.style.right = '20px';
-            titleEl.style.zIndex = '100';
-            titleEl.style.padding = '8px 16px';
-            titleEl.style.background = 'rgba(255, 255, 255, 0.95)';
-            titleEl.style.border = '2px solid #6b46c1';
-            titleEl.style.borderRadius = '8px';
-            titleEl.style.fontWeight = 'bold';
-            titleEl.style.color = '#2d3748';
-            titleEl.style.boxShadow = '0 4px 10px rgba(0,0,0,0.15)';
+            titleEl = document.createElement('div'); titleEl.id = 'archTitle';
+            titleEl.style.cssText = 'position:absolute;top:20px;right:20px;z-index:100;padding:8px 16px;background:rgba(255,255,255,0.95);border:2px solid #6b46c1;border-radius:8px;font-weight:bold;color:#2d3748;box-shadow:0 4px 10px rgba(0,0,0,0.15);';
             document.getElementById('cw').appendChild(titleEl);
         }
-
         if (mode === 'arch') {
             titleEl.style.display = 'block';
-            if (this.focusMode === 0) {
-                titleEl.innerHTML = `🎯 <span style="color:#6b46c1">מפת מערכת מלאה</span> - לחץ לפתיחת קשרים, <b>לחיצה כפולה לזרימה פנימית</b>`;
-            } else {
-                titleEl.innerHTML = `🔍 מתמקד ב: <span style="color:#e53e3e">${this.activeNode.cls.name}</span><br><span style="font-size:0.75rem;font-weight:normal;color:#718096">לחיצה ברקע לאיפוס. לחיצה כפולה לזרימה פנימית.</span>`;
-            }
-        } else {
-            titleEl.style.display = 'none';
-        }
+            if (this.focusMode === 0) titleEl.innerHTML = `🎯 <span style="color:#6b46c1">מפת מערכת מלאה</span> - לחץ על טבעת קומה כדי להציג/להסתיר אותה`;
+            else titleEl.innerHTML = `🔍 מתמקד ב: <span style="color:#e53e3e">${this.activeNode.cls.name}</span><br><span style="font-size:0.75rem;font-weight:normal;color:#718096">לחיצה ברקע לאיפוס. לחיצה כפולה לזרימה פנימית.</span>`;
+        } else titleEl.style.display = 'none';
     },
 
-    getVisibleNodes: function() {
-        return nodes.filter(n => n.archVisible);
-    },
-
+    getVisibleNodes: function() { return nodes.filter(n => n.archVisible); },
     getVisibleRels: function() {
-        if (this.focusMode === 0) return []; 
-        
-        const activeRels = getFilteredRels();
-        const activeNames = this.getVisibleNodes().map(n => n.cls.name);
+        if (this.focusMode === 0) {
+            const activeNames = nodes.filter(n => n.archVisible).map(n => n.cls.name);
+            return getFilteredRels().filter(r => activeNames.includes(r.from) && activeNames.includes(r.to));
+        }
+        const activeRels = getFilteredRels(), activeNames = this.getVisibleNodes().filter(n => !n.isDimmed).map(n => n.cls.name);
         const parentName = this.activeNode.cls.name;
-        
-        return activeRels.filter(r => 
-            (r.from === parentName && activeNames.includes(r.to)) ||
-            (r.to === parentName && activeNames.includes(r.from))
-        );
+        return activeRels.filter(r => (r.from === parentName && activeNames.includes(r.to)) || (r.to === parentName && activeNames.includes(r.from)));
     }
 };
 
@@ -260,7 +291,6 @@ async function go(fs){
   document.getElementById('sF').textContent=v.length; document.getElementById('sC').textContent=classes.filter(c=>c.type==='class').length;
   document.getElementById('sI').textContent=classes.filter(c=>c.type==='interface').length; document.getElementById('sR').textContent=rels.length;
   
-  // ✅ הדלקת כל הכפתורים כולל כפתור הארכיטקטורה החדש
   ['cpBtn','pdfBtn','dlDiagBtn','dlFlowBtn','dlArchBtn'].forEach(id => {
       const el = document.getElementById(id);
       if(el) el.disabled = false;
@@ -269,7 +299,9 @@ async function go(fs){
   createRelFiltersUI(); 
   renderList(); mode = null; setMode('diagram');
 }
-function readF(f){return new Promise(r=>{const fr=new FileReader();fr.onload=e=>r(e.target.result);fr.readAsText(f);})}// ==========================================
+function readF(f){return new Promise(r=>{const fr=new FileReader();fr.onload=e=>r(e.target.result);fr.readAsText(f);})}
+
+// ==========================================
 // 📐 סידור מערך רגיל (Layout)
 // ==========================================
 function ch(cls){
@@ -285,7 +317,7 @@ function getCurH(n){
 }
 
 function layout(){
-  if(mode === 'arch') { ArchLayerManager.calculate(); return; }
+  if(mode === 'arch') { ArchLayerManager.init(); return; }
   
   const ord=['interface','enum','abstract','class'];
   const srt=[...classes].sort((a,b)=>ord.indexOf(a.type)-ord.indexOf(b.type));
@@ -326,15 +358,11 @@ function sizeCV(){cv.width=cw.clientWidth;cv.height=cw.clientHeight;}
 window.addEventListener('resize',()=>{ sizeCV(); if(nodes.length)rv(); if(mNodes.length) sizeMCV(); });
 sizeCV();
 
-// ⚡ תוספת חדשה: לחיצה כפולה לזרימה פנימית
 cv.addEventListener('dblclick', e => {
   const r=cv.getBoundingClientRect(), wx=(e.clientX-r.left-px)/sc, wy=(e.clientY-r.top-py)/sc;
   const currentNodes = mode === 'arch' ? ArchLayerManager.getVisibleNodes() : nodes;
   const hn = currentNodes.find(n => wx >= n.x && wx <= n.x + n.w && wy >= n.y && wy <= n.y + getCurH(n)) || null;
-  
-  if (hn) {
-      openMethodModal(hn.cls);
-  }
+  if (hn) { openMethodModal(hn.cls); }
 });
 
 cv.addEventListener('mousedown',e=>{pan=true;moved=false;ds={x:e.clientX,y:e.clientY};ps={x:px,y:py};});
@@ -371,16 +399,11 @@ window.addEventListener('mouseup',e=>{
     const hn=currentNodes.find(n=>wx>=n.x&&wx<=n.x+n.w&&wy>=n.y&&wy<=n.y+getCurH(n))||null;
     
     if(hn) { 
-        if(mode === 'arch') {
-            ArchLayerManager.handleClick(hn);
-        } else if(mode === 'flow' && selNode === hn) { 
-            // נשאר כתמיכה למצב הישן בנוסף לדאבל-קליק
-            openMethodModal(hn.cls); 
-        } else { 
-            clickNode(hn); 
-        }
+        if(mode === 'arch') ArchLayerManager.handleClick(hn);
+        else if(mode === 'flow' && selNode === hn) openMethodModal(hn.cls); 
+        else clickNode(hn); 
     } else if(!findRel(wx,wy)){ 
-        if (mode === 'arch') ArchLayerManager.reset(); 
+        if (mode === 'arch') ArchLayerManager.handleBgClick(wx, wy); 
         else { selNode=null; closeFP(); draw(); }
     }
   }
@@ -424,27 +447,38 @@ function draw(){
   
   let currentNodes = mode === 'arch' ? ArchLayerManager.getVisibleNodes() : nodes;
   
-  if (mode === 'arch') {
+  if (mode === 'arch' && window.ArchLayerManager && ArchLayerManager.radii) {
       const floorNames = {3: 'UI Layer (Outermost)', 2: 'Logic Layer', 1: 'Data Layer', 0: 'Models Layer (Core)'};
       const bgColors = ['rgba(254, 235, 200, 0.4)', 'rgba(198, 246, 213, 0.4)', 'rgba(233, 216, 253, 0.4)', 'rgba(190, 227, 248, 0.4)'];
-      
       ctx.save();
       for(let f=3; f>=0; f--) {
-          const rData = ArchLayerManager.radii?.[f];
-          if (!rData) continue;
+          const rData = ArchLayerManager.radii[f];
+          if (!rData || !rData.rx) continue;
           
-          ctx.beginPath();
-          ctx.ellipse(0, 0, rData.rx + 160, rData.ry + 160, 0, 0, Math.PI * 2);
-          ctx.fillStyle = bgColors[f];
-          ctx.fill();
-          ctx.strokeStyle = 'rgba(0,0,0,0.08)';
-          ctx.lineWidth = 2;
+          ctx.beginPath(); 
+          ctx.ellipse(0, 0, rData.rx, rData.ry, 0, 0, Math.PI * 2);
+          ctx.fillStyle = bgColors[f]; ctx.fill(); 
+          ctx.strokeStyle = 'rgba(0,0,0,0.15)'; 
+          ctx.lineWidth = rData.expanded ? 2 : 1; 
           ctx.stroke();
           
-          ctx.fillStyle = 'rgba(74, 85, 104, 0.6)';
-          ctx.font = 'bold 24px Segoe UI';
+          ctx.fillStyle = 'rgba(74, 85, 104, 0.8)'; 
           ctx.textAlign = 'center';
-          ctx.fillText(floorNames[f], 0, -rData.ry - 120);
+          
+          if (rData.expanded) {
+              ctx.font = 'bold 24px Segoe UI'; 
+              ctx.fillText(floorNames[f], 0, -rData.ry + 35);
+              if (!ArchLayerManager.visibleFloors.has(f)) {
+                  ctx.font = 'bold 14px Segoe UI'; ctx.fillStyle = 'rgba(229, 62, 62, 0.8)';
+                  ctx.fillText('לחץ כאן להצגת/הסתרת קומה', 0, -rData.ry + 60);
+              }
+          } else {
+              // ממרכז את הטקסט בעדינות בתוך הטבעת הדקה
+              ctx.font = 'bold 14px Segoe UI'; 
+              const prevRy = f > 0 ? (ArchLayerManager.radii[f-1]?.ry || 0) : 0;
+              const textY = -(rData.ry + prevRy) / 2 + 5; 
+              ctx.fillText(floorNames[f], 0, textY);
+          }
       }
       ctx.restore();
   }
@@ -455,9 +489,7 @@ function draw(){
       if(selNode){ drawCard(ctx,selNode,true,selNode===hNode,false); } 
   } else if (mode === 'arch') {
       drawArrows(ctx); 
-      currentNodes.forEach(n=>{ 
-          drawCard(ctx, n, n===ArchLayerManager.activeNode, n===hNode, n.isDimmed); 
-      }); 
+      currentNodes.forEach(n=>{ drawCard(ctx, n, n===ArchLayerManager.activeNode, n===hNode, n.isDimmed); }); 
   } else { 
       drawArrows(ctx); 
       currentNodes.forEach(n=>{ drawCard(ctx,n,n===selNode,n===hNode,false); }); 
@@ -621,7 +653,8 @@ function setMode(m){
     layout();
   } else if(m==='arch') {
     if (hintEl) hintEl.style.display = 'none'; 
-    selNode=null; closeFP(); ArchLayerManager.reset(); 
+    selNode=null; closeFP(); 
+    ArchLayerManager.init(); 
   } else {
     if (hintEl) hintEl.style.display = 'none';
     selNode=null; closeFP(); 
@@ -643,77 +676,32 @@ window.recalcArch = () => { if(mode === 'arch') ArchLayerManager.calculate(); };
 
 window.copyCode = () => copyCode(files, codes, toast);
 
-// ✅ הפתרון ל-PDF: שולחים ל-PDF רק את הקשרים המסוננים בעזרת getFilteredRels() !
 window.exportPDF = () => exportPDF(nodes, classes, getFilteredRels(), files, CW, ACOL, CCOL, drawCard, toast);
 
 document.getElementById('dlDiagBtn').addEventListener('click', () => handleExport('diagram'));
 document.getElementById('dlFlowBtn').addEventListener('click', () => handleExport('flow'));
 
-// ✅ האזנה לכפתור ייצוא ארכיטקטורה
 const archBtn = document.getElementById('dlArchBtn');
 if(archBtn) archBtn.addEventListener('click', () => handleExport('arch'));
 
 function handleExport(exportMode) {
-  const origMode = mode, origSel = selNode, origFocus = mode === 'arch' ? ArchLayerManager.focusMode : 0;
+  const archMan = window.ArchLayerManager; 
+  const origMode = mode, origSel = selNode, origFocus = mode === 'arch' && archMan ? archMan.focusMode : 0;
   
   if (mode !== exportMode) { 
       mode = exportMode; selNode = null; 
-      if(mode === 'arch') ArchLayerManager.reset(); else layout(); 
+      if(mode === 'arch' && archMan) archMan.init(); else layout(); 
   } else { 
       selNode = null; rv(); 
   }
   
   const projectName = files[0]?.name?.replace(/\.[^.]+$/,'') || 'project';
-  let imgData = null;
-  let htmlTemplateMode = exportMode; 
+  const title = projectName + (exportMode === 'arch' ? ' - Architecture' : (exportMode === 'flow' ? ' - Flow' : ' - Diagram'));
+  const archRadii = mode === 'arch' && archMan ? archMan.radii : null;
   
-  // ✅ צילום הקנבס לתרשים וגם לארכיטקטורה
-  if(exportMode === 'diagram' || exportMode === 'arch') {
-    const currentNodes = mode === 'arch' ? ArchLayerManager.getVisibleNodes() : nodes;
-    let minX = 0, maxX = 0, minY = 0, maxY = 0;
-    
-    if (mode === 'arch') {
-        // חישוב גבולות לקנבס הענק של האליפסות
-        const maxR = (ArchLayerManager.radii && ArchLayerManager.radii[3]) ? ArchLayerManager.radii[3].rx + 300 : 2000;
-        const maxRy = (ArchLayerManager.radii && ArchLayerManager.radii[3]) ? ArchLayerManager.radii[3].ry + 300 : 2000;
-        minX = -maxR; maxX = maxR; minY = -maxRy; maxY = maxRy;
-    } else {
-        minX=Math.min(...currentNodes.map(n=>n.x))-80; maxX=Math.max(...currentNodes.map(n=>n.x+n.w))+80;
-        minY=Math.min(...currentNodes.map(n=>n.y))-80; maxY=Math.max(...currentNodes.map(n=>n.y+getCurH(n)))+80;
-    }
-
-    const oc=document.createElement('canvas'); oc.width=maxX-minX; oc.height=maxY-minY;
-    const octx=oc.getContext('2d'); octx.direction='ltr'; octx.fillStyle='white'; octx.fillRect(0,0,oc.width,oc.height); 
-    octx.translate(-minX, -minY);
-    
-    // ציור אליפסות הרקע לתמונת הייצוא (אם זה מצב ארכיטקטורה)
-    if (mode === 'arch') {
-        const floorNames = {3: 'UI Layer (Outermost)', 2: 'Logic Layer', 1: 'Data Layer', 0: 'Models Layer (Core)'};
-        const bgColors = ['rgba(254, 235, 200, 0.4)', 'rgba(198, 246, 213, 0.4)', 'rgba(233, 216, 253, 0.4)', 'rgba(190, 227, 248, 0.4)'];
-        octx.save();
-        for(let f=3; f>=0; f--) {
-            const rData = ArchLayerManager.radii?.[f];
-            if (!rData) continue;
-            octx.beginPath(); octx.ellipse(0, 0, rData.rx + 160, rData.ry + 160, 0, 0, Math.PI * 2);
-            octx.fillStyle = bgColors[f]; octx.fill(); octx.strokeStyle = 'rgba(0,0,0,0.08)'; octx.lineWidth = 2; octx.stroke();
-            octx.fillStyle = 'rgba(74, 85, 104, 0.6)'; octx.font = 'bold 24px Segoe UI'; octx.textAlign = 'center';
-            octx.fillText(floorNames[f], 0, -rData.ry - 120);
-        }
-        octx.restore();
-    }
-
-    drawArrows(octx); 
-    currentNodes.forEach(n => drawCard(octx,n,false,false,false));
-    imgData = oc.toDataURL('image/png');
-    
-    // אנו משתמשים בתבנית ה-HTML הרגילה של 'diagram' כדי להציג את תמונת הארכיטקטורה
-    if (mode === 'arch') htmlTemplateMode = 'diagram'; 
-  }
-  
-  const title = projectName + (exportMode === 'arch' ? ' - Architecture' : '');
-  generateHTMLExport(htmlTemplateMode, title, classes, getFilteredRels(), nodes, imgData);
-  toast(`✅ ייצוא הושלם!`);
+  generateHTMLExport(exportMode, title, classes, getFilteredRels(), nodes, null, archRadii);
+  toast(`✅ ייצוא אינטראקטיבי הושלם!`);
   
   mode = origMode; selNode = origSel; 
-  if(mode === 'arch') { ArchLayerManager.focusMode = origFocus; ArchLayerManager.calculate(); } else layout();
+  if(mode === 'arch' && archMan) { archMan.focusMode = origFocus; archMan.calculate(); } else layout();
 }

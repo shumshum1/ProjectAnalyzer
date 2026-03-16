@@ -20,7 +20,6 @@
     <button class="btn br" id="pdfBtn" disabled onclick="exportPDF()">📄 ייצא PDF</button>
     <button class="btn" style="background:#6b46c1;color:white" id="dlDiagBtn" disabled onclick="downloadHTML('diagram')">⬇ תרשים HTML</button>
     <button class="btn" style="background:#b7791f;color:white" id="dlFlowBtn" disabled onclick="downloadHTML('flow')">⬇ זרימה HTML</button>
-    <button class="btn" style="background:#2b6cb0;color:white" id="dlArchBtn" disabled>🏗️ HTML ארכיטקטורה</button>
   </div>
 </div>
 
@@ -42,12 +41,13 @@
           <option value="clean">Clean Architecture</option>
         </select>
         <div style="font-size:0.7rem; color:#718096; margin-bottom: 3px;">צלילה ממוקדת:</div>
-       <select id="layerFocus" onchange="ArchLayerManager.reset(this.value)" style="width:100%; padding:5px; font-size:0.75rem; border-radius:4px; border:1px solid #e2e8f0;">
-    <option value="3">קומה 3: UI (ממשק)</option>
-    <option value="2">קומה 2: Logic (לוגיקה)</option>
-    <option value="1">קומה 1: Data (נתונים)</option>
-    <option value="0">קומה 0: Models (שדות)</option>
-  </select>
+        <select id="layerFocus" onchange="redrawArch()" style="width:100%; padding:5px; font-size:0.75rem; border-radius:4px; border:1px solid #e2e8f0;">
+          <option value="all">הצג את כל הבניין</option>
+          <option value="3">קומה 3: UI (ממשק)</option>
+          <option value="2">קומה 2: Logic (לוגיקה)</option>
+          <option value="1">קומה 1: Data (נתונים)</option>
+          <option value="0">קומה 0: Models (שדות)</option>
+        </select>
       </div>
 
       <div class="box" id="stBox" style="display:none">
